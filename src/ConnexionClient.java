@@ -1,5 +1,4 @@
 
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -19,6 +18,7 @@ public class ConnexionClient {
 		try {
 			out = new PrintWriter(socketCommunication.getOutputStream());
 			in = new BufferedReader(new InputStreamReader(socketCommunication.getInputStream()));
+
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -26,21 +26,27 @@ public class ConnexionClient {
 
 	}
 
+	/**
+	 * 
+	 * @return L'en tÃªte de la requÃªte Socket
+	 */
 	String getEntete() {
 
 		String s = null, enTete = null;
 
 		try {
-			// Permet de sauvegarder l'emplacement de la première ligne
+			// Permet de sauvegarder l'emplacement de la premiÃ¨re ligne de la requÃªte
 			in.mark(1000);
 
-			// lecture de l'entête http
-			// http est un protocole structuré en lignes
+			// lecture de l'entÃªte http
 			while ((s = in.readLine()).compareTo("") != 0) {
-				System.out.println("reçu: " + s);
+				System.out.println("reÃ§u: " + s);
 				enTete += s + "\r\n";
 
 			}
+
+			// Permet de retourner au mark prÃ©cÃ©dement rÃ©alisÃ©
+			in.reset();
 
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -49,117 +55,168 @@ public class ConnexionClient {
 		return enTete;
 	}
 
-	// Permet de récupérer le nom du fichier demandé
-	private String fichierDemande() {
-		String fichierHtmlDemande = "";
-		String[] strArray;
-		try {
-			//Permet de retourner au mark précédement réalisé
-			in.reset();
-			
-			//Permet d'obtenir le nom du fichier demandé parmit la requête
-			strArray = in.readLine().split("\n");
-			strArray = strArray[0].split(" ");
-			fichierHtmlDemande = strArray[1];
+	/**
+	 * Le serveur prÃ©pare une rÃ©ponse en format HTTP et l'envoie au client
+	 */
+	void envoiReponse() {
+		String nomFichierHtmlDemande, contenuFichierHtml = null;
+		int codeEtatHttp = -1, longueurFichier;
 
-		} catch (IOException e) {
-			e.printStackTrace();
+		// Permet d'obtenir le nom du fichier demandÃ©
+		nomFichierHtmlDemande = cheminFichierDemande();
 
+		// Permet de regarder si le fichier demandÃ© est privÃ© ou non
+		if (!fichierPrive(nomFichierHtmlDemande)) {
+
+			try {
+				// Lit le fichier demander
+				contenuFichierHtml = lireFichier("src/siteHTTP" + nomFichierHtmlDemande);
+
+				codeEtatHttp = 200;
+				
+			} catch (FileNotFoundException e1) {
+				codeEtatHttp = 404;
+			}
+		} else {
+			codeEtatHttp = 401;
 		}
-		return fichierHtmlDemande;
+
+		// Selon le code d'Ã©tat dÃ©finie, il envoit la rÃ©ponse au client
+		switch (codeEtatHttp) {
+		case 200:
+			longueurFichier = contenuFichierHtml.length();
+
+			out.print("HTTP-1.0 200 OK\r\n");
+			out.print("Content-Length: " + longueurFichier + "\r\n");
+			out.print("Content-Type: text/html\r\n\r\n");
+			out.print(contenuFichierHtml);
+
+			out.flush();
+			break;
+
+		case 401:
+			String priveHtml = "";
+			priveHtml += "<html>";
+			priveHtml += "<body>";
+			priveHtml += "<p>";
+			priveHtml += "Erreur, ce fichier est interdit d'accÃ¨s";
+			priveHtml += "</p>";
+			priveHtml += "</body>";
+			priveHtml += "</html>";
+
+			longueurFichier = priveHtml.length();
+
+			out.print("HTTP-1.0 401 Unauthorized\r\n");
+			out.print("Content-Length: " + longueurFichier + "\r\n");
+			out.print("Content-Type: text/html\r\n\r\n");
+			out.print(priveHtml);
+
+			out.flush();
+			break;
+
+		case 404:
+			String fichierNonTrouveHtml = "";
+			fichierNonTrouveHtml += "<html>";
+			fichierNonTrouveHtml += "<body>";
+			fichierNonTrouveHtml += "<p>";
+			fichierNonTrouveHtml += "Erreur, ce fichier n'existe pas";
+			fichierNonTrouveHtml += "</p>";
+			fichierNonTrouveHtml += "</body>";
+			fichierNonTrouveHtml += "</html>";
+
+			longueurFichier = fichierNonTrouveHtml.length();
+
+			out.print("HTTP-1.0 404 Not Found\r\n");
+			out.print("Content-Length: " + longueurFichier + "\r\n");
+			out.print("Content-Type: text/html\r\n\r\n");
+			out.print(fichierNonTrouveHtml);
+
+			out.flush();
+			break;
+
+		default:
+			String erreurHtml = "";
+			erreurHtml += "<html>";
+			erreurHtml += "<body>";
+			erreurHtml += "<p>";
+			erreurHtml += "Erreur, la syntaxe de la requÃªte est erronÃ©e";
+			erreurHtml += "</p>";
+			erreurHtml += "</body>";
+			erreurHtml += "</html>";
+
+			longueurFichier = erreurHtml.length();
+
+			out.print("HTTP-1.0 400 Bad Request\r\n");
+			out.print("Content-Length: " + longueurFichier + "\r\n");
+			out.print("Content-Type: text/html\r\n\r\n");
+			out.print(erreurHtml);
+
+			out.flush();
+			break;
+		}
 	}
 	
-	//Permet de lire un fichier et de le retourner
+	/**
+	 * @return Retourne le chemin du fichier dans l'en tÃªte
+	 */
+	private String cheminFichierDemande() {
+		String fichierHtmlDemande = "", enTete = getEntete();
+		String[] strArray;
+
+		// SÃ©pare l'enTete pour isoler le nom du fichier
+		strArray = enTete.split("\r\n");
+		strArray = strArray[0].split(" ");
+
+		// Le nom du fichier est rÃ©cupÃ©rÃ©
+		fichierHtmlDemande = strArray[1];
+
+		return fichierHtmlDemande;
+	}
+
+	/**
+	 * Permet de lire un fichier et de le retourner. Si le fichier n'est pas trouvÃ©,
+	 * l'erreur sera gÃ©rer par la mÃ©thode qui l'appelera.
+	 * 
+	 * @param Le chemin du fichier
+	 * @return Un string qui contient le contenu du fichier
+	 */
 	private String lireFichier(String chemin) throws FileNotFoundException {
 		String fichierHtml = "";
 
-		File myObj = new File(chemin);
-		Scanner myReader = new Scanner(myObj);
-		while (myReader.hasNextLine()) {
-			fichierHtml += myReader.nextLine();
+		File fichier = new File(chemin);
+		Scanner scanner = new Scanner(fichier);
+		while (scanner.hasNextLine()) {
+			fichierHtml += scanner.nextLine();
 		}
+		scanner.close();
 
 		return fichierHtml;
 	}
 
-	//Vérifie si un fichier est prive ou non
+	/**
+	 * VÃ©rifie si un fichier est privÃ©e ou non
+	 * 
+	 * @param nomFichier
+	 * @return
+	 */
 	private boolean fichierPrive(String nomFichier) {
+		// Liste de tout les fichiers privÃ©s
 		String[] listeFichierPrive = { "/secret.html" };
+
 		boolean fichierPrive = false;
 
+		// VÃ©rifie si le nom du fichier se trouve dans la liste des fichiers privÃ©s
 		for (int i = 0; i < listeFichierPrive.length && !fichierPrive; i++) {
 			if (listeFichierPrive[i].equals(nomFichier)) {
 				fichierPrive = true;
 			}
 		}
-		
 
 		return fichierPrive;
-
-	}
-	/* le serveur prépare une réponse en format HTTP et L'envoie au client */
-
-	void envoiReponse() {
-		String nomFichierHtmlDemande, fichierHtml;
-
-		nomFichierHtmlDemande = fichierDemande();
-
-		if (!fichierPrive(nomFichierHtmlDemande)) {
-
-			try {
-				fichierHtml = lireFichier("src/exemple2/siteHTTP" + nomFichierHtmlDemande);
-
-				int len = fichierHtml.length();
-				out.print("HTTP-1.0 200 OK\r\n");
-				out.print("Content-Length: " + len + "\r\n");
-				out.print("Content-Type: text/html\r\n\r\n");
-				out.print(fichierHtml);
-				
-				out.flush();
-			} catch (FileNotFoundException e1) {
-				String erreurHtml = "";
-				erreurHtml += "<html>";
-				erreurHtml += "<body>";
-				erreurHtml += "<p>";
-				erreurHtml += "Erreur, ce fichier n'existe pas";
-				erreurHtml += "</p>";
-				erreurHtml += "</body>";
-				erreurHtml += "</html>";
-				// longueur du corps de la réponse
-				int len = erreurHtml.length();
-
-				// envoie de la line de début, entêtes, la ligne vide et le corps
-				out.print("HTTP-1.0 404 Not Found\r\n");
-				out.print("Content-Length: " + len + "\r\n");
-				out.print("Content-Type: text/html\r\n\r\n");
-				out.print(erreurHtml);
-
-				out.flush();
-			}
-		} else {
-			String priveHtml = "";
-			priveHtml += "<html>";
-			priveHtml += "<body>";
-			priveHtml += "<p>";
-			priveHtml += "Erreur, ce fichier est interdit d'accès";
-			priveHtml += "</p>";
-			priveHtml += "</body>";
-			priveHtml += "</html>";
-			// longueur du corps de la réponse
-			int len = priveHtml.length();
-
-			// envoie de la line de début, entêtes, la ligne vide et le corps
-			out.print("HTTP-1.0 401 Unauthorized\r\n");
-			out.print("Content-Length: " + len + "\r\n");
-			out.print("Content-Type: text/html\r\n\r\n");
-			out.print(priveHtml);
-			
-			out.flush();
-		}
 	}
 
 	/**
-	 * cette méthode ferme le flux
+	 * cette mÃ©thode ferme le flux
 	 */
 	void fermetureFlux() {
 		try {

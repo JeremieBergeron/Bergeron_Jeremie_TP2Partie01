@@ -10,8 +10,8 @@ import java.util.concurrent.Executors;
 
 /**
  * @author dorsaf serveur qui attend la connexion d'un client sur un port X. Le
- *         serveur reçoit une requête d'un client et lui retourne un message en
- *         HTML Exécution: lancer le serveur et ensuite, ouvrez le navigateur et
+ *         serveur reï¿½oit une requï¿½te d'un client et lui retourne un message en
+ *         HTML Exï¿½cution: lancer le serveur et ensuite, ouvrez le navigateur et
  *         tapez l'adresse http://localhost:port. Observez le message sur le
  *         navigateur
  */
@@ -32,7 +32,7 @@ public class ServeurSocket {
                     ServerSocket socketServeur = new ServerSocket(8085);
                     while (true) {
                         Socket socketCommunication = socketServeur.accept();
-                        clientProcessingPool.submit(new ClientTask(socketCommunication));
+                        clientProcessingPool.submit(new TacheClient(socketCommunication));
                     }
                 } catch (IOException e) {
                     System.err.println("Erreur Client" + e.getMessage());
@@ -44,10 +44,10 @@ public class ServeurSocket {
 
     }
 
-    private class ClientTask implements Runnable {
+    private class TacheClient implements Runnable {
         private final Socket socketCommunication;
 
-        private ClientTask(Socket socketCommunication) {
+        private TacheClient(Socket socketCommunication) {
             this.socketCommunication = socketCommunication;
         }
 
@@ -59,7 +59,7 @@ public class ServeurSocket {
             
 			connexionClient.getEntete();
 			
-			// le serveur renvoie une réponse au client
+			// le serveur renvoie une rÃ©ponse au client
 			connexionClient.envoiReponse();
 
 			connexionClient.fermetureFlux();
